@@ -1,5 +1,7 @@
-
-
+import requests
+import csv
+from utils.logger import get_logger
+from io import StringIO
 
 REQUEST_HEADERS  = {
     'Connection': 'keep-alive',
@@ -19,5 +21,41 @@ REQUEST_HEADERS  = {
 
 class NSE_Helper:
     def __init__(self) -> None:
+        self.logger = get_logger()
         self.nse_home_url = "http://nseindia.com"
+        self.nsearchives_url = "https://nsearchives.nseindia.com"
+        self.session = requests.session()
+        self._update_session()
+    
+    def _update_session(self):
+        self.session.get(self.nse_home_url, headers=REQUEST_HEADERS)
+    
+    def _convert_csv_data_to_dict(self, content: str) -> list[dict]:
+        csv_reader = csv.DictReader(StringIO(content))
+        results = []
+        for row in csv_reader:
+            normalized_value = self._data_normalizer(data=row)
+            results.append(normalized_value)
+        return results
+
+    def _data_normalizer(self, data: dict) -> dict:
+        new_format_data = {
+            "symbol" : data.get("SYMBOL"),
+            "company_name" : data.get("NAME OF COMPANY"),
+            "exchange" : "nse",
+            "isin_number" : data.get(" ISIN NUMBER"),
+            "date_of_listing" : data.get(" DATE OF LISTING"),
+            "face_value" : data.get(" FACE VALUE"),
+            "type" : data.get(" SERIES")
+        }
+        return new_format_data
+    
+    def list_all_symbols(self) -> list:
+        # https://nsearchives.nseindia.com/content/equities/EQUITY_L.csv
+        url = f"{self.nsearchives_url}/content/equities/EQUITY_L.csv"
+        res = self.session.get(url=url, headers=REQUEST_HEADERS)
+        if res.status_code != 200:
+            self.logger.error(f"Status code is non 200!, url: {url}, status code: {res.status_code}, content: {res.text}")
+            exit(1)
+        return self._convert_csv_data_to_dict(content=res.text)
         
